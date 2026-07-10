@@ -114,7 +114,7 @@ const Workspace = () => {
 
   // Project Parameters editing modal state
   const [isEditingParams, setIsEditingParams] = useState(false);
-  const [paramForm, setParamForm] = useState({ margin: 15.0, erection: 10.0, escalation: 4.5 });
+  const [paramForm, setParamForm] = useState({ margin: 15.0, erection: 10.0, escalation: 4.5, conveyorLength: 2965 });
 
   const { data: project, isLoading: projectLoading } = useQuery({
     queryKey: ['project', projectId],
@@ -253,6 +253,7 @@ const Workspace = () => {
         margin: parseFloat((project.global_margin_pct * 100).toFixed(2)),
         erection: parseFloat((project.global_erection_pct * 100).toFixed(2)),
         escalation: parseFloat((project.default_annual_escalation_pct * 100).toFixed(2)),
+        conveyorLength: project.conveyor_length_mtr || 0,
       });
       setIsEditingParams(true);
     }
@@ -264,6 +265,7 @@ const Workspace = () => {
       global_margin_pct: parseFloat(paramForm.margin) / 100,
       global_erection_pct: parseFloat(paramForm.erection) / 100,
       default_annual_escalation_pct: parseFloat(paramForm.escalation) / 100,
+      conveyor_length_mtr: parseFloat(paramForm.conveyorLength) || 0,
     });
   };
 
@@ -303,6 +305,14 @@ const Workspace = () => {
         delete updated[key];
       } else {
         updated[key] = val;
+      }
+      if (activeCategory?.spec_schema) {
+        const idx = activeCategory.spec_schema.indexOf(key);
+        if (idx !== -1) {
+          for (let i = idx + 1; i < activeCategory.spec_schema.length; i++) {
+            delete updated[activeCategory.spec_schema[i]];
+          }
+        }
       }
       return updated;
     });
@@ -406,18 +416,17 @@ const Workspace = () => {
     return lineItems.reduce((acc, item) => acc + item.total_item_cost, 0);
   }, [lineItems]);
 
-  const marginAmount = project ? totalProjectCost * project.global_margin_pct : 0;
   const erectionAmount = project ? totalProjectCost * project.global_erection_pct : 0;
-  const grandEstimateTotal = totalProjectCost + marginAmount + erectionAmount;
+  const grandEstimateTotal = totalProjectCost + erectionAmount;
 
   if (projectLoading) {
-    return <div className="text-center py-20 text-slate-400 text-sm font-mono">Loading project workspace...</div>;
+    return <div className="text-center py-20 text-slate-400 text-sm font-mono">Loading project...</div>;
   }
 
   if (!project) {
     return (
       <div className="max-w-3xl mx-auto px-6 py-12 text-center">
-        <h2 className="text-lg font-semibold text-white">Workspace Not Found</h2>
+        <h2 className="text-lg font-semibold text-white">Project Not Found</h2>
         <Link to="/dashboard" className="btn-primary inline-flex mt-4 text-xs">Return to Dashboard</Link>
       </div>
     );
@@ -443,15 +452,14 @@ const Workspace = () => {
 
         <div className="flex items-center gap-3">
           <div className="hidden md:flex items-center gap-3 text-xs font-mono text-slate-400">
-            <span>Margin: <strong className="text-slate-200">{(project.global_margin_pct * 100).toFixed(1)}%</strong></span>
-            <span>Erection: <strong className="text-slate-200">{(project.global_erection_pct * 100).toFixed(1)}%</strong></span>
-            <span>Escalation: <strong className="text-cyan-400">{(project.default_annual_escalation_pct * 100).toFixed(1)}% / yr</strong></span>
+            <span>Mine Life: <strong className="text-slate-200">{project.total_mine_life_years || 26} Yrs</strong></span>
+            <span>Phases: <strong className="text-cyan-400">{project.phases ? project.phases.length : 3}</strong></span>
           </div>
 
           <button
             onClick={handleOpenParamsModal}
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-cyan-300 hover:text-cyan-200 bg-cyan-500/10 hover:bg-cyan-500/20 px-3 py-1.5 rounded border border-cyan-500/40 transition-all cursor-pointer ml-1"
-            title="Modify Margin, Erection, or Escalation Rate"
+            title="Modify EPC Markup, Erection, or Escalation Rate"
           >
             <Sliders className="w-3.5 h-3.5 text-cyan-400" />
             <span>Edit Params</span>
@@ -470,7 +478,7 @@ const Workspace = () => {
           <button
             onClick={handleDeleteEntireProject}
             className="inline-flex items-center gap-1.5 text-xs font-medium text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 px-3 py-1.5 rounded border border-red-500/30 transition-all cursor-pointer"
-            title="Delete Entire Project Workspace"
+            title="Delete Entire Project"
           >
             <Trash2 className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Delete</span>
@@ -518,30 +526,33 @@ const Workspace = () => {
 
         {activeCategory && (
           <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t border-slate-800/60 transition-opacity duration-300 ${isFetchingValidSpecs ? 'opacity-70' : 'opacity-100'}`}>
-            {activeCategory.spec_schema.map((key) => {
-              const availableOptions = validSpecsData.valid_options?.[key] || [];
-              const currentVal = selectedSpecs[key] || '';
+            {activeCategory.spec_schema
+              .filter((key) => !key.includes(' x ') && !key.includes(' X ') && !key.toLowerCase().includes('spec (') && !key.includes('(') && !key.includes(')'))
+              .map((key) => {
+                const availableOptions = validSpecsData.valid_options?.[key] || [];
+                const currentVal = selectedSpecs[key] || '';
+                const labelName = key === 'Type' ? `${activeCategory?.name?.replace(/s$/i, '') || 'Equipment'} Type` : (key === 'Belt Width' ? 'Belt Width (BW)' : key);
 
-              return (
-                <div key={key}>
-                  <label className="block text-xs font-semibold text-slate-200 mb-1 truncate">
-                    {key}
-                  </label>
-                  <select
-                    value={currentVal}
-                    onChange={(e) => handleSpecChange(key, e.target.value)}
-                    className="input-field text-xs py-1.5 bg-slate-950 border-slate-800 transition-all"
-                  >
-                    <option value="">Any Specification</option>
-                    {availableOptions.map((opt, i) => (
-                      <option key={i} value={opt}>
-                        {String(opt)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              );
-            })}
+                return (
+                  <div key={key}>
+                    <label className="block text-xs font-semibold text-slate-200 mb-1 truncate" title={labelName}>
+                      {labelName}
+                    </label>
+                    <select
+                      value={currentVal}
+                      onChange={(e) => handleSpecChange(key, e.target.value)}
+                      className="input-field text-xs py-1.5 bg-slate-950 border-slate-800 transition-all"
+                    >
+                      <option value="">Any {labelName}</option>
+                      {availableOptions.map((opt, i) => (
+                        <option key={i} value={opt}>
+                          {String(opt)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })}
           </div>
         )}
       </div>
@@ -692,8 +703,9 @@ const Workspace = () => {
                     <th className="p-3">Vendor Name</th>
                     <th className="p-3 text-right">Base Rate</th>
                     <th className="p-3 text-right">Escalated Rate</th>
-                    <th className="p-3">Remarks</th>
+                    <th className="p-3 text-right">Remarks</th>
                     <th className="p-3 text-right">Quantity</th>
+                    <th className="p-3 text-right">EPC Markup</th>
                     <th className="p-3 text-right">Total Cost</th>
                     <th className="p-3 text-center">Actions</th>
                   </tr>
@@ -714,14 +726,19 @@ const Workspace = () => {
                             onChange={(e) => setEditingItem({ ...editingItem, rateId: parseInt(e.target.value, 10) })}
                             className="input-field py-1 px-2 text-xs bg-slate-950 border-cyan-500/60 max-w-[240px]"
                           >
-                            {availableRatesForEdit.map((r) => {
-                              const specStr = r.specifications ? Object.entries(r.specifications).map(([k, v]) => `${k}: ${v}`).join(', ') : '';
-                              return (
+                            {(() => {
+                              const matched = availableRatesForEdit.filter((r) => {
+                                if (!r.specifications || !item.selected_rate?.specifications) return true;
+                                const itemSpecs = item.selected_rate.specifications;
+                                return Object.entries(itemSpecs).every(([k, v]) => k === 'Remarks' || String(r.specifications[k] || '').trim() === String(v || '').trim());
+                              });
+                              const listToRender = matched.length > 0 ? matched : availableRatesForEdit;
+                              return listToRender.map((r) => (
                                 <option key={r.id} value={r.id}>
-                                  {r.vendor_name} {specStr ? `[${specStr}]` : ''} (Base: {formatINR(r.base_rate)})
+                                  {r.vendor_name} (Base: {formatINR(r.base_rate)})
                                 </option>
-                              );
-                            })}
+                              ));
+                            })()}
                           </select>
                         ) : (
                           <span className="font-semibold text-white">{item.selected_rate?.vendor_name}</span>
@@ -742,13 +759,25 @@ const Workspace = () => {
                             type="number"
                             min="0.1"
                             step="0.1"
-                            value={editingItem.qty}
-                            onChange={(e) => setEditingItem({ ...editingItem, qty: parseFloat(e.target.value) || 0 })}
+                            value={editingItem.qty === 0 ? '' : editingItem.qty}
+                            onChange={(e) => setEditingItem({ ...editingItem, qty: e.target.value === '' ? '' : e.target.value.replace(/^0+(?=\d)/, '') })}
                             className="input-field w-16 py-0.5 px-1.5 text-xs font-mono text-right border-cyan-500/60"
                           />
                         ) : (
                           <span>{item.quantity}</span>
                         )}
+                      </td>
+                      <td className="p-3 text-right font-mono text-amber-300">
+                        {(() => {
+                          const baseSub = (item.calculated_escalated_rate || 0) * (item.quantity || 0);
+                          const mp = item.selected_rate?.margin_pct ?? project?.global_margin_pct ?? 0;
+                          return (
+                            <>
+                              <div>{formatINR(baseSub * mp)}</div>
+                              <div className="text-[10px] text-slate-400">({(mp * 100).toFixed(1)}%)</div>
+                            </>
+                          );
+                        })()}
                       </td>
                       <td className="p-3 text-right font-mono font-bold text-emerald-400">
                         {formatINR(item.total_item_cost)}
@@ -814,10 +843,6 @@ const Workspace = () => {
                 <span>{formatINR(totalProjectCost)}</span>
               </div>
               <div className="flex justify-between text-slate-200 font-semibold">
-                <span>Margin ({(project.global_margin_pct * 100).toFixed(1)}%):</span>
-                <span>{formatINR(marginAmount)}</span>
-              </div>
-              <div className="flex justify-between text-slate-200 font-semibold">
                 <span>Erection ({(project.global_erection_pct * 100).toFixed(1)}%):</span>
                 <span>{formatINR(erectionAmount)}</span>
               </div>
@@ -843,24 +868,10 @@ const Workspace = () => {
 
             <h3 className="text-base font-bold text-white mb-1">Edit Estimation Parameters</h3>
             <p className="text-xs text-slate-300 font-medium mb-4">
-              Updating annual escalation will automatically recalculate all existing equipment line item costs!
+              Update project erection percentage and total conveyor length.
             </p>
 
             <form onSubmit={handleSaveParams} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-200 mb-1">
-                  Margin (%)
-                </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  required
-                  value={paramForm.margin}
-                  onChange={(e) => setParamForm({ ...paramForm, margin: e.target.value })}
-                  className="input-field text-xs py-1.5"
-                />
-              </div>
-
               <div>
                 <label className="block text-xs font-semibold text-slate-200 mb-1">
                   Erection (%)
@@ -877,14 +888,15 @@ const Workspace = () => {
 
               <div>
                 <label className="block text-xs font-medium text-cyan-400 mb-1">
-                  Annual Escalation Rate (%)
+                  Conveyor Length (R.Mtr)
                 </label>
                 <input
                   type="number"
-                  step="0.1"
+                  step="any"
+                  min="0"
                   required
-                  value={paramForm.escalation}
-                  onChange={(e) => setParamForm({ ...paramForm, escalation: e.target.value })}
+                  value={paramForm.conveyorLength}
+                  onChange={(e) => setParamForm({ ...paramForm, conveyorLength: e.target.value })}
                   className="input-field text-xs py-1.5 border-cyan-500/50"
                 />
               </div>

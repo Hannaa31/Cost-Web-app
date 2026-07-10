@@ -9,6 +9,7 @@ import ProjectHome from './pages/ProjectHome';
 import MechanicalWorkspace from './pages/MechanicalWorkspace';
 import ElectricalWorkspace from './pages/ElectricalWorkspace';
 import CivilWorkspace from './pages/CivilWorkspace';
+import AdminPanel from './pages/AdminPanel';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -19,75 +20,25 @@ const queryClient = new QueryClient({
   },
 });
 
-const ProtectedRoute = ({ children }) => {
-  const { user, loading } = useAuth();
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-400 font-mono">
-        Verifying secure JWT token...
-      </div>
-    );
-  }
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-  return children;
-};
-
 const AppRoutes = () => {
-  const { user } = useAuth();
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
       <main className="flex-grow">
         <Routes>
-          <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <Login />} />
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/projects/:id"
-            element={
-              <ProtectedRoute>
-                <ProjectHome />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/projects/:id/mechanical"
-            element={
-              <ProtectedRoute>
-                <MechanicalWorkspace />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/projects/:id/electrical"
-            element={
-              <ProtectedRoute>
-                <ElectricalWorkspace />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/projects/:id/civil"
-            element={
-              <ProtectedRoute>
-                <CivilWorkspace />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/login" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/admin" element={<AdminPanel />} />
+          <Route path="/projects/:id" element={<ProjectHome />} />
+          <Route path="/projects/:id/mechanical" element={<MechanicalWorkspace />} />
+          <Route path="/projects/:id/electrical" element={<ElectricalWorkspace />} />
+          <Route path="/projects/:id/civil" element={<CivilWorkspace />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </main>
       <footer className="py-4 px-6 border-t border-slate-900 text-center text-xs text-slate-600">
-        Enterprise Cost Estimation System • Strictly Protected Under Corporate Confidentiality
+        Enterprise CAPEX Estimation System • Strictly Protected Under Corporate Confidentiality
       </footer>
     </div>
   );

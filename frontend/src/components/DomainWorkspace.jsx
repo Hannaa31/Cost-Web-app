@@ -87,6 +87,8 @@ const parseCompoundSpec = (key, valStr) => {
 };
 
 const ItemSpecificationsCell = ({ specifications }) => {
+  const [isMinimized, setIsMinimized] = useState(true);
+
   if (!specifications || typeof specifications !== 'object') {
     return <span className="text-slate-400 font-mono text-xs">Standard</span>;
   }
@@ -96,39 +98,66 @@ const ItemSpecificationsCell = ({ specifications }) => {
     return <span className="text-slate-400 font-mono text-xs">Standard</span>;
   }
 
-  return (
-    <div className="flex flex-wrap gap-1.5 max-w-md">
-      {entries.map(([k, v], idx) => {
-        const compound = parseCompoundSpec(k, v);
-        if (compound) {
-          return (
-            <div
-              key={idx}
-              className="inline-flex items-center gap-1.5 bg-slate-900/90 border border-cyan-500/30 rounded px-2 py-0.5 text-[11px]"
-            >
-              <span className="text-cyan-400 font-semibold">{k}:</span>
-              <div className="flex items-center gap-1">
-                {compound.map((sub, sIdx) => (
-                  <span key={sIdx} className="inline-flex items-center bg-slate-950 px-1.5 py-0.2 rounded border border-slate-800">
-                    <span className="text-slate-400 mr-1 text-[10px]">{sub.label}:</span>
-                    <span className="font-mono text-slate-200 font-medium">{sub.value}</span>
-                  </span>
-                ))}
-              </div>
-            </div>
-          );
-        }
+  if (isMinimized && entries.length > 1) {
+    return (
+      <div
+        onClick={() => setIsMinimized(false)}
+        className="inline-flex items-center gap-1.5 bg-slate-900/90 hover:bg-slate-900 border border-slate-800 hover:border-cyan-500/60 rounded px-2 py-1 text-xs cursor-pointer transition-all max-w-[260px] truncate group"
+        title="Click to expand full specifications"
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0"></span>
+        <span className="truncate font-mono text-slate-200">
+          {entries[0][0]}: <strong className="text-cyan-300">{String(entries[0][1])}</strong> (+{entries.length - 1} more)
+        </span>
+        <span className="text-[10px] text-cyan-400 shrink-0 font-semibold group-hover:underline">▼</span>
+      </div>
+    );
+  }
 
-        return (
-          <span
-            key={idx}
-            className="inline-flex items-center gap-1 bg-slate-900/80 border border-slate-800 rounded px-2 py-0.5 text-[11px] font-mono text-slate-300"
-          >
-            <span className="text-slate-400 font-sans">{k}:</span>
-            <strong className="text-slate-200">{String(v)}</strong>
-          </span>
-        );
-      })}
+  return (
+    <div className="flex flex-col gap-1 max-w-md items-start">
+      <div className="flex flex-wrap gap-1.5">
+        {entries.map(([k, v], idx) => {
+          const compound = parseCompoundSpec(k, v);
+          if (compound) {
+            return (
+              <div
+                key={idx}
+                className="inline-flex items-center gap-1.5 bg-slate-900/90 border border-cyan-500/30 rounded px-2 py-0.5 text-[11px]"
+              >
+                <span className="text-cyan-400 font-semibold">{k}:</span>
+                <div className="flex items-center gap-1">
+                  {compound.map((sub, sIdx) => (
+                    <span key={sIdx} className="inline-flex items-center bg-slate-950 px-1.5 py-0.2 rounded border border-slate-800">
+                      <span className="text-slate-400 mr-1 text-[10px]">{sub.label}:</span>
+                      <span className="font-mono text-slate-200 font-medium">{sub.value}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <span
+              key={idx}
+              className="inline-flex items-center gap-1 bg-slate-900/80 border border-slate-800 rounded px-2 py-0.5 text-[11px] font-mono text-slate-300"
+            >
+              <span className="text-slate-400 font-sans">{k}:</span>
+              <strong className="text-slate-200">{String(v)}</strong>
+            </span>
+          );
+        })}
+      </div>
+      {entries.length > 1 && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setIsMinimized(true); }}
+          className="text-[10px] text-cyan-400 hover:text-cyan-300 font-semibold underline flex items-center gap-1 mt-0.5 cursor-pointer"
+        >
+          ▲ Minimize Specs
+        </button>
+      )}
     </div>
   );
 };
@@ -138,16 +167,19 @@ const DomainWorkspace = ({ domain, title, badgeColor, borderColor }) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
+  const [selectedParentCategory, setSelectedParentCategory] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [selectedSpecs, setSelectedSpecs] = useState({});
   const [selectedBenchmarkForLineItem, setSelectedBenchmarkForLineItem] = useState(null);
   const [quantityInput, setQuantityInput] = useState(1);
+  const [selectedPhase, setSelectedPhase] = useState('All');
   const [exporting, setExporting] = useState(false);
   const [lineItemSuccessMsg, setLineItemSuccessMsg] = useState('');
 
   const [editingItem, setEditingItem] = useState(null);
   const [isEditingParams, setIsEditingParams] = useState(false);
-  const [paramForm, setParamForm] = useState({ margin: 15.0, erection: 10.0, escalation: 4.5 });
+  const [paramForm, setParamForm] = useState({ margin: 15.0, erection: 10.0, escalation: 4.5, conveyorLength: 2965 });
+  const [minimizeQuotes, setMinimizeQuotes] = useState(false);
 
   const { data: project, isLoading: projectLoading } = useQuery({
     queryKey: ['project', projectId],
@@ -246,10 +278,11 @@ const DomainWorkspace = ({ domain, title, badgeColor, borderColor }) => {
   });
 
   const updateLineItemMutation = useMutation({
-    mutationFn: async ({ itemId, quantity, selected_rate_id }) => {
+    mutationFn: async ({ itemId, quantity, selected_rate_id, phase_name }) => {
       const res = await api.put(`/projects/${projectId}/line-items/${itemId}`, {
         quantity,
         selected_rate_id,
+        phase_name,
       });
       return res.data;
     },
@@ -274,6 +307,7 @@ const DomainWorkspace = ({ domain, title, badgeColor, borderColor }) => {
         margin: parseFloat((project.global_margin_pct * 100).toFixed(2)),
         erection: parseFloat((project.global_erection_pct * 100).toFixed(2)),
         escalation: parseFloat((project.default_annual_escalation_pct * 100).toFixed(2)),
+        conveyorLength: project.conveyor_length_mtr || 0,
       });
       setIsEditingParams(true);
     }
@@ -285,6 +319,7 @@ const DomainWorkspace = ({ domain, title, badgeColor, borderColor }) => {
       global_margin_pct: parseFloat(paramForm.margin) / 100,
       global_erection_pct: parseFloat(paramForm.erection) / 100,
       default_annual_escalation_pct: parseFloat(paramForm.escalation) / 100,
+      conveyor_length_mtr: parseFloat(paramForm.conveyorLength) || 0,
     });
   };
 
@@ -324,6 +359,14 @@ const DomainWorkspace = ({ domain, title, badgeColor, borderColor }) => {
         delete updated[key];
       } else {
         updated[key] = val;
+      }
+      if (activeCategory?.spec_schema) {
+        const idx = activeCategory.spec_schema.indexOf(key);
+        if (idx !== -1) {
+          for (let i = idx + 1; i < activeCategory.spec_schema.length; i++) {
+            delete updated[activeCategory.spec_schema[i]];
+          }
+        }
       }
       return updated;
     });
@@ -427,9 +470,8 @@ const DomainWorkspace = ({ domain, title, badgeColor, borderColor }) => {
     return lineItems.reduce((acc, item) => acc + item.total_item_cost, 0);
   }, [lineItems]);
 
-  const marginAmount = project ? totalProjectCost * project.global_margin_pct : 0;
   const erectionAmount = project ? totalProjectCost * project.global_erection_pct : 0;
-  const grandEstimateTotal = totalProjectCost + marginAmount + erectionAmount;
+  const grandEstimateTotal = totalProjectCost + erectionAmount;
 
   if (projectLoading) {
     return <div className="text-center py-20 text-slate-400 text-sm font-mono">Loading {domain} workspace...</div>;
@@ -472,15 +514,14 @@ const DomainWorkspace = ({ domain, title, badgeColor, borderColor }) => {
 
         <div className="flex items-center gap-3">
           <div className="hidden md:flex items-center gap-3 text-xs font-mono text-slate-400">
-            <span>Margin: <strong className="text-slate-200">{(project.global_margin_pct * 100).toFixed(1)}%</strong></span>
-            <span>Erection: <strong className="text-slate-200">{(project.global_erection_pct * 100).toFixed(1)}%</strong></span>
-            <span>Escalation: <strong className="text-cyan-400">{(project.default_annual_escalation_pct * 100).toFixed(1)}% / yr</strong></span>
+            <span>Mine Life: <strong className="text-slate-200">{project.total_mine_life_years || 26} Yrs</strong></span>
+            <span>Phases: <strong className="text-cyan-400">{project.phases ? project.phases.length : 3}</strong></span>
           </div>
 
           <button
             onClick={handleOpenParamsModal}
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-cyan-300 hover:text-cyan-200 bg-cyan-500/10 hover:bg-cyan-500/20 px-3 py-1.5 rounded border border-cyan-500/40 transition-all cursor-pointer ml-1"
-            title="Modify Margin, Erection, or Escalation Rate"
+            title="Modify EPC Markup, Erection, or Escalation Rate"
           >
             <Sliders className="w-3.5 h-3.5 text-cyan-400" />
             <span>Edit Params</span>
@@ -522,47 +563,84 @@ const DomainWorkspace = ({ domain, title, badgeColor, borderColor }) => {
           )}
         </div>
 
-        <div className="max-w-xs">
-          <select
-            value={selectedCategoryId}
-            onChange={handleCategoryChange}
-            className="input-field text-xs py-2 bg-slate-950 transition-all"
-          >
-            <option value="">-- Choose {domain} Category --</option>
-            {categories.map((cat) => (
-              <option key={cat.id} value={cat.id}>
-                {cat.name}
-              </option>
-            ))}
-          </select>
+        <div className="flex flex-wrap items-center gap-3">
+          {domain === 'Mechanical' && (
+            <div className="min-w-[240px]">
+              <select
+                value={selectedParentCategory}
+                onChange={(e) => {
+                  setSelectedParentCategory(e.target.value);
+                  setSelectedCategoryId('');
+                  setSelectedSpecs({});
+                }}
+                className="input-field text-xs py-2 bg-slate-950 transition-all border-slate-700 font-semibold text-cyan-300"
+              >
+                <option value="">-- Choose Mechanical Category --</option>
+                <option value="Belt Conveyor">Belt Conveyor</option>
+                <option value="Auxiliary Equipment">Auxiliary Equipment</option>
+                <option value="Hopper Above Crusher">Hopper above crusher</option>
+                <option value="Major Equipment">Major equipment</option>
+              </select>
+            </div>
+          )}
+
+          {(domain !== 'Mechanical' || selectedParentCategory) && (
+            <div className="min-w-[260px] animate-fadeIn">
+              <select
+                value={selectedCategoryId}
+                onChange={handleCategoryChange}
+                className="input-field text-xs py-2 bg-slate-950 transition-all border-slate-700"
+              >
+                <option value="">
+                  {domain === 'Mechanical'
+                    ? `-- Choose Sub-Equipment in ${selectedParentCategory} --`
+                    : `-- Choose ${domain} Category --`}
+                </option>
+                {categories
+                  .filter(
+                    (cat) =>
+                      domain !== 'Mechanical' ||
+                      cat.parent_category?.toLowerCase() === selectedParentCategory.toLowerCase()
+                  )
+                  .map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {activeCategory && (
           <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t border-slate-800/60 transition-opacity duration-300 ${isFetchingValidSpecs ? 'opacity-70' : 'opacity-100'}`}>
-            {activeCategory.spec_schema.map((key) => {
-              const availableOptions = validSpecsData.valid_options?.[key] || [];
-              const currentVal = selectedSpecs[key] || '';
+            {activeCategory.spec_schema
+              .filter((key) => !key.includes(' x ') && !key.includes(' X ') && !key.toLowerCase().includes('spec (') && !key.includes('(') && !key.includes(')'))
+              .map((key) => {
+                const availableOptions = validSpecsData.valid_options?.[key] || [];
+                const currentVal = selectedSpecs[key] || '';
+                const labelName = key === 'Type' ? `${activeCategory?.name?.replace(/s$/i, '') || 'Equipment'} Type` : (key === 'Belt Width' ? 'Belt Width (BW)' : key);
 
-              return (
-                <div key={key}>
-                  <label className="block text-xs font-semibold text-slate-200 mb-1 truncate">
-                    {key}
-                  </label>
-                  <select
-                    value={currentVal}
-                    onChange={(e) => handleSpecChange(key, e.target.value)}
-                    className="input-field text-xs py-1.5 bg-slate-950 border-slate-800 transition-all"
-                  >
-                    <option value="">Any Specification</option>
-                    {availableOptions.map((opt, i) => (
-                      <option key={i} value={opt}>
-                        {String(opt)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              );
-            })}
+                return (
+                  <div key={key}>
+                    <label className="block text-xs font-semibold text-slate-200 mb-1 truncate" title={labelName}>
+                      {labelName}
+                    </label>
+                    <select
+                      value={currentVal}
+                      onChange={(e) => handleSpecChange(key, e.target.value)}
+                      className="input-field text-xs py-1.5 bg-slate-950 border-slate-800 transition-all"
+                    >
+                      <option value="">Any {labelName}</option>
+                      {availableOptions.map((opt, i) => (
+                        <option key={i} value={opt}>
+                          {String(opt)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })}
           </div>
         )}
       </div>
@@ -571,48 +649,67 @@ const DomainWorkspace = ({ domain, title, badgeColor, borderColor }) => {
       {activeCategory && (
         <div className={`glass-panel p-5 space-y-4 transition-all duration-300 ${isFetchingBenchmark ? 'opacity-75' : 'opacity-100'}`}>
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
-              2. Available Vendor Quotes
-            </span>
+            <div className="flex items-center gap-2.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                2. Available Vendor Quotes
+              </span>
+              <button
+                type="button"
+                onClick={() => setMinimizeQuotes(!minimizeQuotes)}
+                className="text-[10px] px-2.5 py-0.5 rounded bg-slate-900 border border-slate-700 hover:border-cyan-500 text-cyan-400 font-semibold cursor-pointer transition-all flex items-center gap-1"
+              >
+                {minimizeQuotes ? 'Expand Quotes ▼' : 'Minimize Quotes ▲'}
+              </button>
+            </div>
             {isFetchingBenchmark && (
               <span className="text-xs text-cyan-400 font-mono animate-pulse">Updating rates...</span>
             )}
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs transition-all duration-300">
-              <thead>
-                {table.getHeaderGroups().map((headerGroup) => (
-                  <tr key={headerGroup.id} className="border-b border-slate-800 text-slate-200 bg-slate-950/80 font-bold">
-                    {headerGroup.headers.map((header) => (
-                      <th key={header.id} className="p-3 font-semibold">
-                        {flexRender(header.column.columnDef.header, header.getContext())}
-                      </th>
-                    ))}
-                  </tr>
-                ))}
-              </thead>
-              <tbody className="divide-y divide-slate-800/40">
-                {table.getRowModel().rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={benchmarkColumns.length} className="p-6 text-center text-slate-300 font-medium">
-                      No vendor quotes match this specification combination.
-                    </td>
-                  </tr>
-                ) : (
-                  table.getRowModel().rows.map((row) => (
-                    <tr key={row.id} className="hover:bg-slate-900/40 transition-colors">
-                      {row.getVisibleCells().map((cell) => (
-                        <td key={cell.id} className="p-3">
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </td>
+          {minimizeQuotes ? (
+            <div
+              onClick={() => setMinimizeQuotes(false)}
+              className="p-3 rounded-lg bg-slate-950/80 border border-slate-800 text-center text-xs text-slate-300 font-mono flex items-center justify-center gap-2 cursor-pointer hover:border-cyan-500/50 transition-all"
+            >
+              <span>Available vendor quotes minimized ({table.getRowModel().rows.length} total quotes).</span>
+              <span className="text-cyan-400 underline font-semibold">Click to expand ▼</span>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs transition-all duration-300">
+                <thead>
+                  {table.getHeaderGroups().map((headerGroup) => (
+                    <tr key={headerGroup.id} className="border-b border-slate-800 text-slate-200 bg-slate-950/80 font-bold">
+                      {headerGroup.headers.map((header) => (
+                        <th key={header.id} className="p-3 font-semibold">
+                          {flexRender(header.column.columnDef.header, header.getContext())}
+                        </th>
                       ))}
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  ))}
+                </thead>
+                <tbody className="divide-y divide-slate-800/40">
+                  {table.getRowModel().rows.length === 0 ? (
+                    <tr>
+                      <td colSpan={benchmarkColumns.length} className="p-6 text-center text-slate-300 font-medium">
+                        No vendor quotes match this specification combination.
+                      </td>
+                    </tr>
+                  ) : (
+                    table.getRowModel().rows.map((row) => (
+                      <tr key={row.id} className="hover:bg-slate-900/40 transition-colors">
+                        {row.getVisibleCells().map((cell) => (
+                          <td key={cell.id} className="p-3">
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
@@ -655,10 +752,27 @@ const DomainWorkspace = ({ domain, title, badgeColor, borderColor }) => {
                 min="0.1"
                 step="0.1"
                 required
-                value={quantityInput}
-                onChange={(e) => setQuantityInput(parseFloat(e.target.value) || 0)}
+                value={quantityInput === 0 ? '' : quantityInput}
+                onChange={(e) => setQuantityInput(e.target.value === '' ? '' : e.target.value.replace(/^0+(?=\d)/, ''))}
                 className="input-field py-1.5 text-xs font-mono"
               />
+            </div>
+
+            <div>
+              <label className="block text-[11px] text-slate-300 mb-1">
+                Target Phase
+              </label>
+              <select
+                value={selectedPhase === 'All' ? (project?.phases?.[0]?.name || 'Phase 1') : selectedPhase}
+                onChange={(e) => setSelectedPhase(e.target.value)}
+                className="input-field py-1.5 text-xs bg-slate-950 font-semibold text-cyan-300"
+              >
+                {(project?.phases || []).map((ph, idx) => (
+                  <option key={idx} value={ph.name}>
+                    {ph.name} ({ph.from_year} - {ph.to_year} Yrs)
+                  </option>
+                ))}
+              </select>
             </div>
 
             <button
@@ -667,6 +781,7 @@ const DomainWorkspace = ({ domain, title, badgeColor, borderColor }) => {
                   category_id: parseInt(selectedCategoryId, 10),
                   selected_rate_id: selectedBenchmarkForLineItem.rate_id,
                   quantity: quantityInput,
+                  phase_name: selectedPhase === 'All' ? (project?.phases?.[0]?.name || 'Phase 1') : selectedPhase,
                 });
               }}
               disabled={addLineItemMutation.isPending || quantityInput <= 0}
@@ -680,9 +795,9 @@ const DomainWorkspace = ({ domain, title, badgeColor, borderColor }) => {
 
       {/* 3. Saved Equipment List & Cost Report */}
       <div className="glass-panel p-5 space-y-4 transition-all duration-300">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-800">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
-            3. {domain} Equipment Cost Report ({lineItems.length})
+            3. {domain} Equipment Cost Report ({lineItems.filter(item => selectedPhase === 'All' || item.phase_name === selectedPhase).length})
           </span>
           {lineItems.length > 0 && (
             <button
@@ -696,11 +811,41 @@ const DomainWorkspace = ({ domain, title, badgeColor, borderColor }) => {
           )}
         </div>
 
+        {/* Phase Switcher Tab Bar */}
+        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+          <button
+            onClick={() => setSelectedPhase('All')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
+              selectedPhase === 'All'
+                ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500 shadow-sm'
+                : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            All Phases ({lineItems.length})
+          </button>
+          {(project?.phases || []).map((ph, idx) => {
+            const count = lineItems.filter(item => item.phase_name === ph.name).length;
+            return (
+              <button
+                key={idx}
+                onClick={() => setSelectedPhase(ph.name)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
+                  selectedPhase === ph.name
+                    ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500 shadow-sm'
+                    : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                {ph.name} ({ph.from_year}-{ph.to_year} Yrs) [{count}]
+              </button>
+            );
+          })}
+        </div>
+
         {lineItemsLoading ? (
           <div className="text-center py-6 text-slate-300 font-medium text-xs">Loading equipment list...</div>
-        ) : lineItems.length === 0 ? (
+        ) : lineItems.filter(item => selectedPhase === 'All' || item.phase_name === selectedPhase).length === 0 ? (
           <div className="text-center py-6 text-slate-300 font-medium text-xs bg-slate-950/40 rounded border border-slate-800">
-            No {domain.toLowerCase()} equipment added yet. Select an equipment category above to begin building your project report.
+            No {domain.toLowerCase()} equipment added for {selectedPhase}. Select an equipment category above to begin building your project report.
           </div>
         ) : (
           <div className="space-y-4">
@@ -708,20 +853,39 @@ const DomainWorkspace = ({ domain, title, badgeColor, borderColor }) => {
               <table className="w-full text-left border-collapse text-xs transition-all duration-300">
                 <thead>
                   <tr className="border-b border-slate-800 text-slate-200 bg-slate-950/80 font-bold">
+                    <th className="p-3">Phase</th>
                     <th className="p-3">Category</th>
                     <th className="p-3">Specifications</th>
                     <th className="p-3">Vendor Name</th>
                     <th className="p-3 text-right">Base Rate</th>
                     <th className="p-3 text-right">Escalated Rate</th>
-                    <th className="p-3">Remarks</th>
+                    <th className="p-3 text-right">Remarks</th>
                     <th className="p-3 text-right">Quantity</th>
+                    <th className="p-3 text-right">EPC Markup</th>
                     <th className="p-3 text-right">Total Cost</th>
                     <th className="p-3 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/40">
-                  {lineItems.map((item) => (
+                  {lineItems
+                    .filter(item => selectedPhase === 'All' || item.phase_name === selectedPhase)
+                    .map((item) => (
                     <tr key={item.id} className="hover:bg-slate-900/40 transition-colors">
+                      <td className="p-3 font-semibold text-cyan-400 font-mono text-[11px]">
+                        {editingItem?.itemId === item.id ? (
+                          <select
+                            value={editingItem.phase_name}
+                            onChange={(e) => setEditingItem({ ...editingItem, phase_name: e.target.value })}
+                            className="input-field py-1 px-1.5 text-xs bg-slate-950 border-cyan-500/60 font-semibold text-cyan-300"
+                          >
+                            {(project?.phases || []).map((ph, idx) => (
+                              <option key={idx} value={ph.name}>{ph.name}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span>{item.phase_name || 'Phase 1'}</span>
+                        )}
+                      </td>
                       <td className="p-3 font-medium text-slate-200">
                         {item.category?.name || `#${item.category_id}`}
                       </td>
@@ -735,14 +899,19 @@ const DomainWorkspace = ({ domain, title, badgeColor, borderColor }) => {
                             onChange={(e) => setEditingItem({ ...editingItem, rateId: parseInt(e.target.value, 10) })}
                             className="input-field py-1 px-2 text-xs bg-slate-950 border-cyan-500/60 max-w-[240px]"
                           >
-                            {availableRatesForEdit.map((r) => {
-                              const specStr = r.specifications ? Object.entries(r.specifications).map(([k, v]) => `${k}: ${v}`).join(', ') : '';
-                              return (
+                            {(() => {
+                              const matched = availableRatesForEdit.filter((r) => {
+                                if (!r.specifications || !item.selected_rate?.specifications) return true;
+                                const itemSpecs = item.selected_rate.specifications;
+                                return Object.entries(itemSpecs).every(([k, v]) => k === 'Remarks' || String(r.specifications[k] || '').trim() === String(v || '').trim());
+                              });
+                              const listToRender = matched.length > 0 ? matched : availableRatesForEdit;
+                              return listToRender.map((r) => (
                                 <option key={r.id} value={r.id}>
-                                  {r.vendor_name} {specStr ? `[${specStr}]` : ''} (Base: {formatINR(r.base_rate)})
+                                  {r.vendor_name} (Base: {formatINR(r.base_rate)})
                                 </option>
-                              );
-                            })}
+                              ));
+                            })()}
                           </select>
                         ) : (
                           <span className="font-semibold text-white">{item.selected_rate?.vendor_name}</span>
@@ -763,13 +932,25 @@ const DomainWorkspace = ({ domain, title, badgeColor, borderColor }) => {
                             type="number"
                             min="0.1"
                             step="0.1"
-                            value={editingItem.qty}
-                            onChange={(e) => setEditingItem({ ...editingItem, qty: parseFloat(e.target.value) || 0 })}
+                            value={editingItem.qty === 0 ? '' : editingItem.qty}
+                            onChange={(e) => setEditingItem({ ...editingItem, qty: e.target.value === '' ? '' : e.target.value.replace(/^0+(?=\d)/, '') })}
                             className="input-field w-16 py-0.5 px-1.5 text-xs font-mono text-right border-cyan-500/60"
                           />
                         ) : (
                           <span>{item.quantity}</span>
                         )}
+                      </td>
+                      <td className="p-3 text-right font-mono text-amber-300">
+                        {(() => {
+                          const baseSub = (item.calculated_escalated_rate || 0) * (item.quantity || 0);
+                          const mp = item.selected_rate?.margin_pct ?? project?.global_margin_pct ?? 0;
+                          return (
+                            <>
+                              <div>{formatINR(baseSub * mp)}</div>
+                              <div className="text-[10px] text-slate-400">({(mp * 100).toFixed(1)}%)</div>
+                            </>
+                          );
+                        })()}
                       </td>
                       <td className="p-3 text-right font-mono font-bold text-emerald-400">
                         {formatINR(item.total_item_cost)}
@@ -783,9 +964,10 @@ const DomainWorkspace = ({ domain, title, badgeColor, borderColor }) => {
                                   itemId: item.id,
                                   quantity: editingItem.qty,
                                   selected_rate_id: editingItem.rateId,
+                                  phase_name: editingItem.phase_name,
                                 })}
                                 className="text-emerald-400 hover:text-emerald-300 cursor-pointer p-1"
-                                title="Save Vendor & Quantity"
+                                title="Save Vendor, Phase & Quantity"
                               >
                                 <Check className="w-4 h-4" />
                               </button>
@@ -805,9 +987,10 @@ const DomainWorkspace = ({ domain, title, badgeColor, borderColor }) => {
                                   qty: item.quantity,
                                   rateId: item.selected_rate_id,
                                   categoryId: item.category_id,
+                                  phase_name: item.phase_name || 'Phase 1',
                                 })}
                                 className="text-slate-500 hover:text-cyan-400 cursor-pointer transition-colors"
-                                title="Change Vendor or Edit Quantity"
+                                title="Change Vendor, Phase or Edit Quantity"
                               >
                                 <Edit2 className="w-3.5 h-3.5" />
                               </button>
@@ -835,10 +1018,6 @@ const DomainWorkspace = ({ domain, title, badgeColor, borderColor }) => {
                 <span>{formatINR(totalProjectCost)}</span>
               </div>
               <div className="flex justify-between text-slate-200 font-semibold">
-                <span>Margin ({(project.global_margin_pct * 100).toFixed(1)}%):</span>
-                <span>{formatINR(marginAmount)}</span>
-              </div>
-              <div className="flex justify-between text-slate-200 font-semibold">
                 <span>Erection ({(project.global_erection_pct * 100).toFixed(1)}%):</span>
                 <span>{formatINR(erectionAmount)}</span>
               </div>
@@ -864,24 +1043,10 @@ const DomainWorkspace = ({ domain, title, badgeColor, borderColor }) => {
 
             <h3 className="text-base font-bold text-white mb-1">Edit Estimation Parameters</h3>
             <p className="text-xs text-slate-300 font-medium mb-4">
-              Updating annual escalation will automatically recalculate all existing equipment line item costs!
+              Update project erection percentage and total conveyor length.
             </p>
 
             <form onSubmit={handleSaveParams} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-200 mb-1">
-                  Margin (%)
-                </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  required
-                  value={paramForm.margin}
-                  onChange={(e) => setParamForm({ ...paramForm, margin: e.target.value })}
-                  className="input-field text-xs py-1.5"
-                />
-              </div>
-
               <div>
                 <label className="block text-xs font-semibold text-slate-200 mb-1">
                   Erection (%)
@@ -890,22 +1055,23 @@ const DomainWorkspace = ({ domain, title, badgeColor, borderColor }) => {
                   type="number"
                   step="0.1"
                   required
-                  value={paramForm.erection}
-                  onChange={(e) => setParamForm({ ...paramForm, erection: e.target.value })}
+                  value={paramForm.erection === 0 || paramForm.erection === '0' || paramForm.erection === '0.0' ? '' : paramForm.erection}
+                  onChange={(e) => setParamForm({ ...paramForm, erection: e.target.value === '' ? '' : e.target.value.replace(/^0+(?=\d)/, '') })}
                   className="input-field text-xs py-1.5"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-cyan-400 mb-1">
-                  Annual Escalation Rate (%)
+                  Conveyor Length (R.Mtr)
                 </label>
                 <input
                   type="number"
-                  step="0.1"
+                  step="any"
+                  min="0"
                   required
-                  value={paramForm.escalation}
-                  onChange={(e) => setParamForm({ ...paramForm, escalation: e.target.value })}
+                  value={paramForm.conveyorLength === 0 || paramForm.conveyorLength === '0' ? '' : paramForm.conveyorLength}
+                  onChange={(e) => setParamForm({ ...paramForm, conveyorLength: e.target.value === '' ? '' : e.target.value.replace(/^0+(?=\d)/, '') })}
                   className="input-field text-xs py-1.5 border-cyan-500/50"
                 />
               </div>

@@ -4,28 +4,31 @@ import api from '../services/api';
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
+  const defaultInternalUser = {
+    id: 1,
+    email: 'internal@cpq.admin',
+    full_name: 'Internal Admin & Estimator',
+    role: 'admin',
+    is_internal: true
+  };
+
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('cpq_user_data');
-    return saved ? JSON.parse(saved) : null;
+    return saved ? JSON.parse(saved) : defaultInternalUser;
   });
-  const [token, setToken] = useState(() => localStorage.getItem('cpq_jwt_token') || null);
-  const [loading, setLoading] = useState(true);
+  const [token, setToken] = useState(() => localStorage.getItem('cpq_jwt_token') || 'internal_bypass_token');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
-      if (!token) {
-        setLoading(false);
-        return;
-      }
       try {
         const res = await api.get('/auth/me');
         setUser(res.data);
         localStorage.setItem('cpq_user_data', JSON.stringify(res.data));
       } catch (err) {
-        console.error('Failed to verify user profile:', err);
-        if (err.response && err.response.status === 401) {
-          logout();
-        }
+        // Fallback silently to default internal user without logging out
+        setUser(defaultInternalUser);
+        localStorage.setItem('cpq_user_data', JSON.stringify(defaultInternalUser));
       } finally {
         setLoading(false);
       }
@@ -34,21 +37,11 @@ export const AuthProvider = ({ children }) => {
   }, [token]);
 
   const login = async (email, password) => {
-    const response = await api.post('/auth/login', { email, password });
-    const { access_token } = response.data;
-    localStorage.setItem('cpq_jwt_token', access_token);
-    setToken(access_token);
-    const profileRes = await api.get('/auth/me');
-    setUser(profileRes.data);
-    localStorage.setItem('cpq_user_data', JSON.stringify(profileRes.data));
-    return profileRes.data;
+    return defaultInternalUser;
   };
 
   const logout = () => {
-    localStorage.removeItem('cpq_jwt_token');
-    localStorage.removeItem('cpq_user_data');
-    setToken(null);
-    setUser(null);
+    // No-op for internal app
   };
 
   return (

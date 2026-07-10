@@ -42,13 +42,35 @@ def parse_x_separated_spec(header: str, val_str: str):
     return parsed
 
 def detect_domain(name: str) -> models.DomainType:
-    n = name.lower()
-    if any(k in n for k in ['transformer', 'switchgear', 'cable', 'panel', 'motor', 'electrical', 'substation', 'lighting', 'relay']):
+    n = name.lower().strip()
+    # Explicit Mechanical checks first to prevent overlap with words like 'structure' or 'road'
+    if any(k in n for k in ['pulley', 'idler', 'belt', 'skirt board', 'cleaner', 'motor', 'gearbox', 'coupling', 'thruster', 'take up', 'technological structure', 'chute work', 'accessories', 'hoist', 'winch', 'divertor gate', 'road gate', 'slide gate', 'cbms', 'metal detector', 'coal sampler', 'belt weigher', 'hopper', 'secondary sizer', 'vibrating feeder', 'truck loading', 'rapid wagon', 'stacker', 'reclaimer', 'ipc', 'shifting', 'workshop']):
+        return models.DomainType.Mechanical
+    elif any(k in n for k in ['transformer', 'switchgear', 'cable', 'panel', 'electrical', 'substation', 'lighting', 'relay']):
         return models.DomainType.Electrical
-    elif any(k in n for k in ['concrete', 'structure', 'civil', 'building', 'foundation', 'excavation', 'steel', 'road', 'drainage', 'shed']):
+    elif any(k in n for k in ['concrete', 'structure', 'civil', 'building', 'foundation', 'excavation', 'steel', 'road', 'drainage', 'shed', 'rcc']):
         return models.DomainType.Civil
     else:
         return models.DomainType.Mechanical
+
+def detect_parent_category(name: str, domain: models.DomainType) -> str:
+    n = name.lower().strip()
+    if domain == models.DomainType.Mechanical:
+        if any(k in n for k in ['pulley', 'idler', 'belt', 'skirt board', 'cleaner', 'motor', 'gearbox', 'coupling', 'thruster', 'take up', 'technological structure', 'chute work', 'accessories', 'stand', 'stringer', 'decking', 'fastener', 'seal plate', 'sailhard', 'ms plate', 'wire mesh', 'conveyor hood', 'drive unit']) and not any(k in n for k in ['belt weigher']):
+            return "Belt Conveyor"
+        elif any(k in n for k in ['hoist', 'winch', 'divertor gate', 'road gate', 'slide gate', 'cbms', 'metal detector', 'coal sampler', 'belt weigher', 'auxiliary']):
+            return "Auxiliary Equipment"
+        elif any(k in n for k in ['hopper']):
+            return "Hopper Above Crusher"
+        elif any(k in n for k in ['secondary sizer', 'sizer', 'vibrating feeder', 'feeder', 'truck loading', 'rapid wagon', 'tlo', 'stacker', 'reclaimer', 'ipc', 'skid mounted', 'shifting', 'workshop', 'major equipment']):
+            return "Major Equipment"
+        else:
+            return "Belt Conveyor"
+    elif domain == models.DomainType.Electrical:
+        return "Electrical Equipment"
+    elif domain == models.DomainType.Civil:
+        return "Civil Works"
+    return "Other"
 
 def import_excel_sheets(file_path: str):
     if not os.path.exists(file_path):
@@ -99,82 +121,72 @@ def import_excel_sheets(file_path: str):
                 except (ValueError, TypeError):
                     continue
 
-                vendor_val = str(row[vendor_col]).strip() if vendor_col and not pd.isna(row[vendor_col]) else "Standard Quote"
+                date_val = datetime.datetime.utcnow()
+                if date_col and pd.notna(row[date_col]):
+                    try:
+                        date_val = pd.to_datetime(row[date_col], dayfirst=True, errors='coerce')
+                        if pd.isna(date_val):
+                            date_val = datetime.datetime.utcnow()
+                    except Exception:
+                        pass
 
-                if date_col and not pd.isna(row[date_col]):
-                    date_val = pd.to_datetime(row[date_col], dayfirst=True, errors='coerce')
-                    if pd.isna(date_val):
-                        date_val = datetime.datetime.now()
-                else:
-                    date_val = datetime.datetime.now()
-
-                remark_val = str(row[remarks_col]).strip() if remarks_col and not pd.isna(row[remarks_col]) else ""
+                vendor_val = str(row[vendor_col]).strip() if vendor_col and pd.notna(row[vendor_col]) else "Standard Vendor"
+                remarks_val = str(row[remarks_col]).strip() if remarks_col and pd.notna(row[remarks_col]) else ""
 
                 specs_dict = {}
-                if remark_val:
-                    specs_dict["Remarks"] = remark_val
-
                 for sc in raw_spec_cols:
-                    val = row[sc]
-                    if pd.isna(val):
-                        continue
-
-                    val_str = str(val).strip()
-                    if isinstance(val, float) and val.is_integer():
-                        val_str = str(int(val))
-
-                    # Automatically parse compound x-separated columns
-                    if 'x' in sc.lower() and len(re.split(r'\s*[xX]\s*', sc)) > 1:
-                        parsed_sub = parse_x_separated_spec(sc, val_str)
-                        for sub_k, sub_v in parsed_sub.items():
-                            specs_dict[sub_k] = sub_v
-                            if sub_k not in all_discovered_keys:
-                                all_discovered_keys.append(sub_k)
-                    elif 'x' in val_str.lower() and len(re.split(r'\s*[xX]\s*', val_str)) > 1 and ('spec' in sc.lower() or 'desc' in sc.lower()):
-                        parsed_sub = parse_x_separated_spec(sc, val_str)
-                        for sub_k, sub_v in parsed_sub.items():
-                            specs_dict[sub_k] = sub_v
-                            if sub_k not in all_discovered_keys:
-                                all_discovered_keys.append(sub_k)
-                    else:
-                        clean_key = sc.strip()
-                        specs_dict[clean_key] = val_str
-                        if clean_key not in all_discovered_keys:
-                            all_discovered_keys.append(clean_key)
+                    if pd.notna(row[sc]):
+                        specs_dict[sc] = str(row[sc]).strip()
+                        if sc not in all_discovered_keys:
+                            all_discovered_keys.append(sc)
 
                 rows_data.append({
                     "vendor": vendor_val,
                     "rate": rate_val,
                     "date": date_val,
-                    "remarks": remark_val,
+                    "remarks": remarks_val,
                     "specs": specs_dict
                 })
 
             # Get or Create Category
             category = db.query(models.EquipmentCategory).filter_by(name=sheet_name.strip()).first()
+            type_cats = ['Pulleys', 'Idlers', 'Belts', 'Hoists & Electric Winches', 'Motors & Drive Units', 'Transformers', 'Switchgears', 'Power Cables', 'Control Panels', 'RCC Foundations', 'Structural Steelwork', 'Industrial Sheds', 'Excavation & Roads', 'Belt Cleaners', 'Divertor gate', 'Road gate', 'Slide gate', 'Metal Detector']
+            bw_cats = ['Pulleys', 'Belt Cleaners', 'Belt Conveyor']
+            is_type = sheet_name.strip() in type_cats or any('type' in str(k).lower() for k in all_discovered_keys)
+            is_bw = sheet_name.strip() in bw_cats or any(str(k).lower() in ['belt width', 'bw', 'bw (mm)'] for k in all_discovered_keys)
+
             if not category:
                 domain_val = detect_domain(sheet_name.strip())
+                parent_val = detect_parent_category(sheet_name.strip(), domain_val)
+                final_schema = (["Type"] if is_type else []) + (["Belt Width"] if is_bw else []) + [k for k in all_discovered_keys if k not in ["Type", "Belt Width", "BW", "Remarks"] and not any(w in str(k).lower() for w in ["remarks", "belt width", "bw"]) and not str(k).lower() == "type"]
                 category = models.EquipmentCategory(
                     name=sheet_name.strip(),
-                    spec_schema=all_discovered_keys,
-                    domain=domain_val
+                    spec_schema=final_schema,
+                    domain=domain_val,
+                    parent_category=parent_val,
+                    has_type=is_type,
+                    has_bw=is_bw
                 )
                 db.add(category)
                 db.commit()
                 db.refresh(category)
-                print(f"  [Created] New Category: '{category.name}' [{category.domain.value}]")
+                print(f"  [Created] New Category: '{category.name}' [Domain: {category.domain.value} | Parent: {category.parent_category} | has_type: {is_type} | has_bw: {is_bw}]")
             else:
+                domain_val = category.domain or detect_domain(sheet_name.strip())
+                parent_val = detect_parent_category(category.name, domain_val)
+                category.parent_category = parent_val
                 existing_schema = list(category.spec_schema or [])
-                updated = False
                 for k in all_discovered_keys:
                     if k not in existing_schema:
                         existing_schema.append(k)
-                        updated = True
-                if updated:
-                    category.spec_schema = existing_schema
-                    db.commit()
-                    db.refresh(category)
-                print(f"  [Existing] Found Category: '{category.name}' [{category.domain.value}]")
+                if is_type:
+                    category.has_type = True
+                if is_bw:
+                    category.has_bw = True
+                category.spec_schema = (["Type"] if category.has_type else []) + (["Belt Width"] if category.has_bw else []) + [k for k in existing_schema if k not in ["Type", "Belt Width", "BW", "Remarks"] and not any(w in str(k).lower() for w in ["remarks", "belt width", "bw"]) and not str(k).lower() == "type"]
+                db.commit()
+                db.refresh(category)
+                print(f"  [Existing] Found Category: '{category.name}' [Domain: {category.domain.value} | Parent: {category.parent_category} | has_type: {category.has_type} | has_bw: {category.has_bw}]")
 
             # Insert rates with Smart Deduplication
             sheet_added = 0

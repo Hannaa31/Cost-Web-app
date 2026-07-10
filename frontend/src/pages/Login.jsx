@@ -49,10 +49,10 @@ const Login = () => {
             <Lock className="w-8 h-8 text-slate-950 stroke-[2.5]" />
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight text-white">
-            Cost Estimation Tool
+            CAPEX Estimation
           </h1>
           <p className="text-sm text-slate-400 mt-2">
-            Cost Estimation & Technical Benchmarking Engine
+            CAPEX Estimation & Benchmarking Engine
           </p>
         </div>
 
@@ -109,7 +109,7 @@ const Login = () => {
               disabled={isSubmitting}
               className="btn-primary w-full py-3 text-base shadow-cyan-500/25 mt-2"
             >
-              <span>{isSubmitting ? 'Authenticating...' : 'Sign In to Workspace'}</span>
+              <span>{isSubmitting ? 'Authenticating...' : 'Sign In'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>

@@ -41,6 +41,9 @@ class Project(Base):
     global_margin_pct = Column(Float, default=0.15)  # e.g. 0.15 for 15%
     global_erection_pct = Column(Float, default=0.10) # e.g. 0.10 for 10%
     default_annual_escalation_pct = Column(Float, default=0.045) # e.g. 0.045 for 4.5% annual inflation/escalation
+    conveyor_length_mtr = Column(Float, default=0.0) # Total length of conveyor in R.Mtr
+    total_mine_life_years = Column(Integer, default=26, nullable=False)
+    phases = Column(JSONBType, default=lambda: [{"name": "Phase 1", "from_year": 0, "to_year": 5}, {"name": "Phase 2", "from_year": 6, "to_year": 15}, {"name": "Phase 3", "from_year": 16, "to_year": 26}], nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     creator = relationship("User", back_populates="projects")
@@ -52,6 +55,9 @@ class EquipmentCategory(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False, index=True)
     domain = Column(SAEnum(DomainType), default=DomainType.Mechanical, nullable=False, index=True)
+    parent_category = Column(String, nullable=True, index=True) # e.g. "Belt Conveyor", "Auxiliary Equipment", "Hopper Above Crusher", "Major Equipment"
+    has_type = Column(Boolean, default=False, nullable=False)
+    has_bw = Column(Boolean, default=False, nullable=False)
     # spec_schema defines list of specification parameter keys expected for this category
     # e.g., ["Pulley Type", "BW (mm)", "Diameter", "Shell Thk", "Face Width", "Shaft Dia Brg", "Shaft Dia Hub", "Lagging"]
     spec_schema = Column(JSONBType, nullable=False)
@@ -69,6 +75,8 @@ class MasterRate(Base):
     quotation_date = Column(DateTime, nullable=False)
     specifications = Column(JSONBType, nullable=False)
     remarks = Column(String, nullable=True)
+    margin_pct = Column(Float, default=0.10, nullable=False)
+    escalation_pct = Column(Float, default=0.045, nullable=False)
 
     category = relationship("EquipmentCategory", back_populates="master_rates")
     line_items = relationship("EstimateLineItem", back_populates="selected_rate")
@@ -81,6 +89,8 @@ class EstimateLineItem(Base):
     category_id = Column(Integer, ForeignKey("equipment_categories.id"), nullable=False)
     selected_rate_id = Column(Integer, ForeignKey("master_rates.id"), nullable=False)
     domain = Column(SAEnum(DomainType), default=DomainType.Mechanical, nullable=False, index=True)
+    parent_category = Column(String, nullable=True, index=True)
+    phase_name = Column(String, default="Phase 1", nullable=False, index=True)
     quantity = Column(Float, nullable=False, default=1.0)
     calculated_escalated_rate = Column(Float, nullable=False)
     total_item_cost = Column(Float, nullable=False)

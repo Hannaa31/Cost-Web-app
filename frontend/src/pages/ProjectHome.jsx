@@ -11,7 +11,7 @@ import {
   Building2,
   ChevronRight,
   TrendingUp,
-  DollarSign,
+  IndianRupee,
   PieChart,
   RefreshCw,
   Layers,
@@ -59,7 +59,7 @@ const ProjectHome = () => {
 
     const tot = mSub + eSub + cSub;
     const margin = project ? tot * project.global_margin_pct : 0;
-    const erection = project ? tot * project.global_erection_pct : 0;
+    const erection = project ? (tot + margin) * project.global_erection_pct : 0;
     const grand = tot + margin + erection;
 
     return {
@@ -75,29 +75,6 @@ const ProjectHome = () => {
       grandTotal: grand,
     };
   }, [lineItems, project]);
-
-  const handleExportFullReport = async () => {
-    try {
-      setExporting(true);
-      const res = await api.get(`/projects/${projectId}/export-excel`, {
-        params: { domain: 'Full' },
-        responseType: 'blob',
-      });
-      const url = window.URL.createObjectURL(new Blob([res.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      const cleanName = project.name.replace(/[^a-zA-Z0-9_-]/g, '_');
-      link.setAttribute('download', `${cleanName}_Full_Project_Report.xlsx`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } catch (err) {
-      alert('Failed to generate full Excel report.');
-      console.error(err);
-    } finally {
-      setExporting(false);
-    }
-  };
 
   if (projectLoading) {
     return (
@@ -136,24 +113,21 @@ const ProjectHome = () => {
                 {project.client}
               </span>
             </div>
-            <div className="flex flex-wrap items-center gap-4 mt-1.5 text-xs text-slate-400 font-mono">
-              <span>Global Margin: <strong className="text-slate-200">{(project.global_margin_pct * 100).toFixed(1)}%</strong></span>
-              <span>•</span>
-              <span>Global Erection: <strong className="text-slate-200">{(project.global_erection_pct * 100).toFixed(1)}%</strong></span>
-              <span>•</span>
-              <span>Default Escalation: <strong className="text-cyan-400">{(project.default_annual_escalation_pct * 100).toFixed(1)}% / yr</strong></span>
+            <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-300 font-mono">
+              <span className="bg-slate-950 px-2.5 py-1 rounded border border-slate-800">
+                Total Mine Life: <strong className="text-white">{project.total_mine_life_years || 26} Years</strong>
+              </span>
+              <span className="bg-slate-950 px-2.5 py-1 rounded border border-slate-800">
+                Phases: <strong className="text-cyan-400">{project.phases ? project.phases.length : 3} Phases</strong>
+              </span>
+              {project.phases && project.phases.map((ph, idx) => (
+                <span key={idx} className="text-[11px] bg-slate-900/80 text-slate-400 px-2 py-0.5 rounded border border-slate-800">
+                  {ph.name}: {ph.from_year}-{ph.to_year}y
+                </span>
+              ))}
             </div>
           </div>
         </div>
-
-        <button
-          onClick={handleExportFullReport}
-          disabled={exporting}
-          className="inline-flex items-center justify-center gap-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg shadow-emerald-900/30 transition-all cursor-pointer disabled:opacity-50 hover:scale-[1.02] active:scale-[0.98]"
-        >
-          {exporting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}
-          <span>Export 4-Sheet Full Report (.xlsx)</span>
-        </button>
       </div>
 
       {/* Executive Financial Summary Section */}
@@ -197,22 +171,22 @@ const ProjectHome = () => {
         <div className="glass-panel p-5 border-l-4 border-cyan-500 flex flex-col justify-between shadow-xl shadow-cyan-950/20">
           <div className="flex items-center justify-between text-cyan-300 mb-2">
             <span className="text-xs font-bold uppercase tracking-wider">Grand Project Total</span>
-            <DollarSign className="w-5 h-5 text-cyan-400" />
+            <IndianRupee className="w-5 h-5 text-cyan-400" />
           </div>
           <div className="text-2xl sm:text-3xl font-black font-mono text-emerald-400">{formatINR(grandTotal)}</div>
           <div className="text-[11px] text-slate-300 mt-2 flex items-center justify-between font-mono border-t border-slate-800 pt-2">
             <span>Equip: {formatINR(subtotal)}</span>
-            <span>+M/E: {formatINR(marginAmount + erectionAmount)}</span>
+            <span>+EPC/E: {formatINR(marginAmount + erectionAmount)}</span>
           </div>
         </div>
       </div>
 
-      {/* Domain Workspaces Portal Cards */}
+      {/* Domain Discipline Portal Cards */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-white flex items-center gap-2">
             <Layers className="w-5 h-5 text-cyan-400" />
-            <span>Engineering Discipline Workspaces</span>
+            <span>Engineering Disciplines</span>
           </h2>
           <span className="text-xs text-slate-400">Select a discipline to configure specifications and benchmark vendor quotes</span>
         </div>
@@ -230,7 +204,7 @@ const ProjectHome = () => {
                 <Wrench className="w-6 h-6" />
               </div>
               <h3 className="text-xl font-bold text-white group-hover:text-emerald-300 transition-colors">
-                Mechanical Workspace
+                Mechanical Discipline
               </h3>
               <p className="text-xs text-slate-400 mt-2 leading-relaxed">
                 Estimate conveyor components, Pulleys, Belts, Idlers, Drive Units, and mechanical assemblies with dynamic specification filtering.
@@ -243,7 +217,7 @@ const ProjectHome = () => {
                 <span className="text-sm font-bold text-emerald-400">{formatINR(mechSub)}</span>
               </div>
               <div className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400 group-hover:translate-x-1 transition-transform">
-                <span>Enter Workspace</span>
+                <span>Enter Discipline</span>
                 <ChevronRight className="w-4 h-4" />
               </div>
             </div>
@@ -261,7 +235,7 @@ const ProjectHome = () => {
                 <Zap className="w-6 h-6" />
               </div>
               <h3 className="text-xl font-bold text-white group-hover:text-amber-300 transition-colors">
-                Electrical Workspace
+                Electrical Discipline
               </h3>
               <p className="text-xs text-slate-400 mt-2 leading-relaxed">
                 Benchmark Transformers, Switchgears, Power Cables, Control Panels, Motors, and substation electrification infrastructure.
@@ -274,7 +248,7 @@ const ProjectHome = () => {
                 <span className="text-sm font-bold text-amber-400">{formatINR(elecSub)}</span>
               </div>
               <div className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-400 group-hover:translate-x-1 transition-transform">
-                <span>Enter Workspace</span>
+                <span>Enter Discipline</span>
                 <ChevronRight className="w-4 h-4" />
               </div>
             </div>
@@ -292,7 +266,7 @@ const ProjectHome = () => {
                 <Building2 className="w-6 h-6" />
               </div>
               <h3 className="text-xl font-bold text-white group-hover:text-indigo-300 transition-colors">
-                Civil Workspace
+                Civil Discipline
               </h3>
               <p className="text-xs text-slate-400 mt-2 leading-relaxed">
                 Configure RCC Structures, Foundations, Structural Steelwork, Excavation, Roads, Drainage, and industrial shed structures.
@@ -305,7 +279,7 @@ const ProjectHome = () => {
                 <span className="text-sm font-bold text-indigo-400">{formatINR(civilSub)}</span>
               </div>
               <div className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-400 group-hover:translate-x-1 transition-transform">
-                <span>Enter Workspace</span>
+                <span>Enter Discipline</span>
                 <ChevronRight className="w-4 h-4" />
               </div>
             </div>

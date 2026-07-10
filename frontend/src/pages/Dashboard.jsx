@@ -14,9 +14,43 @@ const Dashboard = () => {
     global_margin_pct: 0.15,
     global_erection_pct: 0.10,
     default_annual_escalation_pct: 0.045,
+    conveyor_length_mtr: '',
+    total_mine_life_years: '',
+    phases: [],
   });
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
+
+  const handlePhaseCountChange = (count) => {
+    const parsed = parseInt(count);
+    if (isNaN(parsed) || parsed < 1) {
+      setNewProject({ ...newProject, phases: [] });
+      return;
+    }
+    const num = Math.min(15, parsed);
+    const currentPhases = [...newProject.phases];
+    if (num > currentPhases.length) {
+      for (let i = currentPhases.length; i < num; i++) {
+        currentPhases.push({
+          name: `Phase ${i + 1}`,
+          from_year: '',
+          to_year: '',
+        });
+      }
+    } else if (num < currentPhases.length) {
+      currentPhases.splice(num);
+    }
+    setNewProject({ ...newProject, phases: currentPhases });
+  };
+
+  const handlePhaseItemChange = (index, field, value) => {
+    const updated = [...newProject.phases];
+    updated[index] = {
+      ...updated[index],
+      [field]: field.includes('year') ? (value === '' ? '' : parseInt(value) || '') : value,
+    };
+    setNewProject({ ...newProject, phases: updated });
+  };
 
   const fetchDashboardData = async () => {
     try {
@@ -45,9 +79,16 @@ const Dashboard = () => {
     try {
       await api.post('/projects', {
         ...newProject,
-        global_margin_pct: parseFloat(newProject.global_margin_pct),
-        global_erection_pct: parseFloat(newProject.global_erection_pct),
-        default_annual_escalation_pct: parseFloat(newProject.default_annual_escalation_pct),
+        global_margin_pct: parseFloat(newProject.global_margin_pct) || 0.15,
+        global_erection_pct: parseFloat(newProject.global_erection_pct) || 0.10,
+        default_annual_escalation_pct: parseFloat(newProject.default_annual_escalation_pct) || 0.045,
+        conveyor_length_mtr: parseFloat(newProject.conveyor_length_mtr) || 0,
+        total_mine_life_years: parseInt(newProject.total_mine_life_years) || 0,
+        phases: newProject.phases.map(ph => ({
+          name: ph.name || 'Phase',
+          from_year: parseInt(ph.from_year) || 0,
+          to_year: parseInt(ph.to_year) || 0,
+        })),
       });
       setIsModalOpen(false);
       setNewProject({
@@ -56,6 +97,9 @@ const Dashboard = () => {
         global_margin_pct: 0.15,
         global_erection_pct: 0.10,
         default_annual_escalation_pct: 0.045,
+        conveyor_length_mtr: '',
+        total_mine_life_years: '',
+        phases: [],
       });
       fetchDashboardData();
     } catch (err) {
@@ -103,7 +147,7 @@ const Dashboard = () => {
       <div className="grid grid-cols-2 gap-4 max-w-md">
         <div className="glass-panel p-4 flex items-center justify-between">
           <div>
-            <div className="text-[11px] text-slate-400 font-medium">Workspaces</div>
+            <div className="text-[11px] text-slate-400 font-medium">Projects</div>
             <div className="text-xl font-bold text-white mt-0.5">{projects.length}</div>
           </div>
           <Briefcase className="w-5 h-5 text-cyan-400" />
@@ -129,7 +173,7 @@ const Dashboard = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {projects.map((project) => (
+          {projects.map((project, idx) => (
             <div
               key={project.id}
               className="glass-panel p-5 flex flex-col justify-between hover:border-cyan-500/40 transition-all group relative"
@@ -140,32 +184,42 @@ const Dashboard = () => {
                     {project.name}
                   </h3>
                   <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
-                    #{project.id}
+                    #{idx + 1}
                   </span>
                 </div>
                 <div className="text-xs text-slate-400 mt-1">
                   Client: <strong className="text-slate-300">{project.client}</strong>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 mt-4 p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 text-center font-mono">
-                  <div>
-                    <div className="text-[10px] uppercase text-slate-300 font-semibold font-sans">Margin</div>
-                    <div className="text-xs font-bold text-slate-200 mt-0.5">
-                      {(project.global_margin_pct * 100).toFixed(1)}%
+                <div className="mt-4 p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 text-center font-mono">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <div className="text-[10px] uppercase text-slate-300 font-semibold font-sans">Mine Life</div>
+                      <div className="text-xs font-bold text-slate-200 mt-0.5">
+                        {project.total_mine_life_years || 26} Years
+                      </div>
+                    </div>
+                    <div className="border-l border-slate-800">
+                      <div className="text-[10px] uppercase text-slate-300 font-semibold font-sans">Phases</div>
+                      <div className="text-xs font-bold text-cyan-400 mt-0.5">
+                        {project.phases ? `${project.phases.length} Phases` : '3 Phases'}
+                      </div>
                     </div>
                   </div>
-                  <div className="border-x border-slate-800">
-                    <div className="text-[10px] uppercase text-slate-300 font-semibold font-sans">Erection</div>
-                    <div className="text-xs font-bold text-slate-200 mt-0.5">
-                      {(project.global_erection_pct * 100).toFixed(1)}%
+                  {project.phases && project.phases.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-slate-800/60 flex flex-wrap justify-center gap-1">
+                      {project.phases.slice(0, 3).map((ph, idx) => (
+                        <span key={idx} className="text-[10px] bg-slate-900 text-slate-300 px-1.5 py-0.5 rounded border border-slate-800">
+                          {ph.name} ({ph.from_year}-{ph.to_year}y)
+                        </span>
+                      ))}
+                      {project.phases.length > 3 && (
+                        <span className="text-[10px] bg-slate-900 text-slate-400 px-1.5 py-0.5 rounded border border-slate-800">
+                          +{project.phases.length - 3} more
+                        </span>
+                      )}
                     </div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] uppercase text-slate-300 font-semibold font-sans">Escalation</div>
-                    <div className="text-xs font-bold text-cyan-400 mt-0.5">
-                      {(project.default_annual_escalation_pct * 100).toFixed(1)}%
-                    </div>
-                  </div>
+                  )}
                 </div>
               </Link>
 
@@ -173,7 +227,7 @@ const Dashboard = () => {
               <button
                 onClick={(e) => handleDeleteProject(e, project.id, project.name)}
                 className="absolute top-4 right-4 text-slate-400 hover:text-red-400 transition-colors cursor-pointer p-1"
-                title="Delete Project Workspace"
+                title="Delete Project"
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
@@ -203,7 +257,7 @@ const Dashboard = () => {
               <X className="w-4 h-4" />
             </button>
 
-            <h3 className="text-base font-bold text-white mb-4">New Project Workspace</h3>
+            <h3 className="text-base font-bold text-white mb-4">New Project</h3>
 
             <form onSubmit={handleCreateProject} className="space-y-4">
               {error && (
@@ -241,40 +295,97 @@ const Dashboard = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-2 pt-1">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-200 mb-1">Margin (0.15)</label>
+              <div className="grid grid-cols-3 gap-3 pt-2 border-t border-slate-800">
+                <div className="flex flex-col justify-end">
+                  <label className="block text-[11px] leading-tight font-medium text-cyan-400 mb-1.5 min-h-[28px] flex items-end">
+                    Total Mine Life (Years)
+                  </label>
                   <input
                     type="number"
-                    step="0.01"
+                    min="1"
+                    max="100"
                     required
-                    value={newProject.global_margin_pct}
-                    onChange={(e) => setNewProject({ ...newProject, global_margin_pct: e.target.value })}
-                    className="input-field text-xs py-1.5"
+                    value={newProject.total_mine_life_years}
+                    onChange={(e) => setNewProject({ ...newProject, total_mine_life_years: e.target.value === '' ? '' : parseInt(e.target.value) || '' })}
+                    placeholder="e.g. 26"
+                    className="input-field text-xs bg-slate-950 font-bold text-cyan-300 py-1.5 text-center"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-200 mb-1">Erection (0.10)</label>
+                <div className="flex flex-col justify-end">
+                  <label className="block text-[11px] leading-tight font-medium text-cyan-400 mb-1.5 min-h-[28px] flex items-end">
+                    Number of Phases
+                  </label>
                   <input
                     type="number"
-                    step="0.01"
+                    min="1"
+                    max="15"
                     required
-                    value={newProject.global_erection_pct}
-                    onChange={(e) => setNewProject({ ...newProject, global_erection_pct: e.target.value })}
-                    className="input-field text-xs py-1.5"
+                    value={newProject.phases.length || ''}
+                    onChange={(e) => handlePhaseCountChange(e.target.value)}
+                    placeholder="e.g. 3"
+                    className="input-field text-xs bg-slate-950 font-bold text-cyan-300 py-1.5 text-center"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-200 mb-1">Escalation (0.045)</label>
+                <div className="flex flex-col justify-end">
+                  <label className="block text-[11px] leading-tight font-medium text-cyan-400 mb-1.5 min-h-[28px] flex items-end">
+                    Conveyor Length (R.Mtr)
+                  </label>
                   <input
                     type="number"
-                    step="0.005"
+                    min="0"
+                    step="any"
                     required
-                    value={newProject.default_annual_escalation_pct}
-                    onChange={(e) => setNewProject({ ...newProject, default_annual_escalation_pct: e.target.value })}
-                    className="input-field text-xs py-1.5"
+                    value={newProject.conveyor_length_mtr}
+                    onChange={(e) => setNewProject({ ...newProject, conveyor_length_mtr: e.target.value === '' ? '' : parseFloat(e.target.value) || '' })}
+                    placeholder="e.g. 2965"
+                    className="input-field text-xs bg-slate-950 font-bold text-cyan-300 py-1.5 text-center"
                   />
                 </div>
+              </div>
+
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                  Phase Period Configurations
+                </div>
+                {newProject.phases.map((ph, idx) => (
+                  <div key={idx} className="p-2.5 rounded bg-slate-950/80 border border-slate-800 grid grid-cols-3 gap-2 items-center">
+                    <div>
+                      <label className="block text-[10px] text-slate-400 mb-0.5">Name</label>
+                      <input
+                        type="text"
+                        value={ph.name}
+                        onChange={(e) => handlePhaseItemChange(idx, 'name', e.target.value)}
+                        className="input-field text-xs py-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-400 mb-0.5">From Year</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        required
+                        value={ph.from_year}
+                        onChange={(e) => handlePhaseItemChange(idx, 'from_year', e.target.value)}
+                        placeholder="From"
+                        className="input-field text-xs py-1 text-center font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-400 mb-0.5">To Year</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        required
+                        value={ph.to_year}
+                        onChange={(e) => handlePhaseItemChange(idx, 'to_year', e.target.value)}
+                        placeholder="To"
+                        className="input-field text-xs py-1 text-center font-mono"
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
 
               <div className="flex justify-end gap-2 pt-4 border-t border-slate-800 mt-4">

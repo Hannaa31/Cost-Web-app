@@ -42,6 +42,13 @@ class ProjectCreate(BaseModel):
     global_margin_pct: float = Field(0.15, ge=0.0, le=1.0)
     global_erection_pct: float = Field(0.10, ge=0.0, le=1.0)
     default_annual_escalation_pct: float = Field(0.045, ge=0.0, le=1.0)
+    conveyor_length_mtr: float = Field(0.0, ge=0.0)
+    total_mine_life_years: int = Field(26, ge=1, le=100)
+    phases: List[Dict[str, Any]] = Field(default_factory=lambda: [
+        {"name": "Phase 1", "from_year": 0, "to_year": 5},
+        {"name": "Phase 2", "from_year": 6, "to_year": 15},
+        {"name": "Phase 3", "from_year": 16, "to_year": 26}
+    ])
 
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
@@ -49,6 +56,9 @@ class ProjectUpdate(BaseModel):
     global_margin_pct: Optional[float] = Field(None, ge=0.0, le=1.0)
     global_erection_pct: Optional[float] = Field(None, ge=0.0, le=1.0)
     default_annual_escalation_pct: Optional[float] = Field(None, ge=0.0, le=1.0)
+    conveyor_length_mtr: Optional[float] = Field(None, ge=0.0)
+    total_mine_life_years: Optional[int] = Field(None, ge=1, le=100)
+    phases: Optional[List[Dict[str, Any]]] = None
 
 class ProjectResponse(ProjectCreate):
     id: int
@@ -63,6 +73,17 @@ class EquipmentCategoryCreate(BaseModel):
     name: str
     spec_schema: List[str]
     domain: DomainType = DomainType.Mechanical
+    parent_category: Optional[str] = None
+    has_type: bool = False
+    has_bw: bool = False
+
+class EquipmentCategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    spec_schema: Optional[List[str]] = None
+    domain: Optional[DomainType] = None
+    parent_category: Optional[str] = None
+    has_type: Optional[bool] = None
+    has_bw: Optional[bool] = None
 
 class EquipmentCategoryResponse(EquipmentCategoryCreate):
     id: int
@@ -78,9 +99,21 @@ class MasterRateCreate(BaseModel):
     quotation_date: datetime
     specifications: Dict[str, Any]
     remarks: Optional[str] = None
+    margin_pct: float = 0.10
+    escalation_pct: float = 0.045
+
+class MasterRateUpdate(BaseModel):
+    vendor_name: Optional[str] = None
+    base_rate: Optional[float] = None
+    quotation_date: Optional[datetime] = None
+    specifications: Optional[Dict[str, Any]] = None
+    remarks: Optional[str] = None
+    margin_pct: Optional[float] = None
+    escalation_pct: Optional[float] = None
 
 class MasterRateResponse(MasterRateCreate):
     id: int
+    category: Optional[EquipmentCategoryResponse] = None
 
     class Config:
         from_attributes = True
@@ -120,10 +153,13 @@ class EstimateLineItemCreate(BaseModel):
     selected_rate_id: int
     quantity: float = Field(1.0, gt=0.0)
     domain: Optional[DomainType] = None
+    parent_category: Optional[str] = None
+    phase_name: str = "Phase 1"
 
 class EstimateLineItemUpdate(BaseModel):
     quantity: Optional[float] = Field(None, gt=0.0)
     selected_rate_id: Optional[int] = None
+    phase_name: Optional[str] = None
 
 class EstimateLineItemResponse(BaseModel):
     id: int
@@ -131,6 +167,8 @@ class EstimateLineItemResponse(BaseModel):
     category_id: int
     selected_rate_id: int
     domain: DomainType
+    parent_category: Optional[str] = None
+    phase_name: str
     quantity: float
     calculated_escalated_rate: float
     total_item_cost: float
